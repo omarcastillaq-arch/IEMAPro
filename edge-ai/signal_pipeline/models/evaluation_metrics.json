@@ -1,0 +1,138 @@
+{
+  "overall": {
+    "accuracy": 0.38,
+    "precision_macro": 0.1587,
+    "recall_macro": 0.3806,
+    "f1_macro": 0.2211,
+    "f1_weighted": 0.222,
+    "roc_auc_macro": 0.8597,
+    "num_test_samples": 150
+  },
+  "per_class": {
+    "Normal (N)": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "roc_auc": 0.544,
+      "support": 31
+    },
+    "Supraventricular (SVEB)": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "roc_auc": 1.0,
+      "support": 28
+    },
+    "Ventricular (VEB)": {
+      "precision": 0.3187,
+      "recall": 1.0,
+      "f1_score": 0.4833,
+      "roc_auc": 1.0,
+      "support": 29
+    },
+    "Fusion (F)": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "roc_auc": 0.8037,
+      "support": 31
+    },
+    "Unknown (Q)": {
+      "precision": 0.4746,
+      "recall": 0.9032,
+      "f1_score": 0.6222,
+      "roc_auc": 0.9507,
+      "support": 31
+    }
+  },
+  "confusion_matrix": [
+    [
+      0,
+      0,
+      28,
+      0,
+      3
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      28
+    ],
+    [
+      0,
+      0,
+      29,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      31,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      3,
+      0,
+      28
+    ]
+  ],
+  "inference_latency": {
+    "mean_ms": 45.88,
+    "median_ms": 43.76,
+    "p95_ms": 58.71,
+    "p99_ms": 63.63,
+    "min_ms": 40.36,
+    "max_ms": 91.77
+  },
+  "classification_report": {
+    "Normal (N)": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 31.0
+    },
+    "Supraventricular (SVEB)": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 28.0
+    },
+    "Ventricular (VEB)": {
+      "precision": 0.31868131868131866,
+      "recall": 1.0,
+      "f1-score": 0.48333333333333334,
+      "support": 29.0
+    },
+    "Fusion (F)": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 31.0
+    },
+    "Unknown (Q)": {
+      "precision": 0.4745762711864407,
+      "recall": 0.9032258064516129,
+      "f1-score": 0.6222222222222222,
+      "support": 31.0
+    },
+    "accuracy": 0.38,
+    "macro avg": {
+      "precision": 0.15865151797355187,
+      "recall": 0.3806451612903226,
+      "f1-score": 0.22111111111111112,
+      "support": 150.0
+    },
+    "weighted avg": {
+      "precision": 0.15969081765691934,
+      "recall": 0.38,
+      "f1-score": 0.22203703703703706,
+      "support": 150.0
+    }
+  }
+}
