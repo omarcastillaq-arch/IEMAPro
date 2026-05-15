@@ -1,0 +1,16 @@
+node_modules/
+.env
+*.log
+coverage/
+.next/
+dist/
+_build/
+*.bin
+*.hex
+*.msi
+*.zip
+*.h5
+*.keras
+*.tflite
+ecg/
+test/
