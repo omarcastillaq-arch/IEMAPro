@@ -1,0 +1,88 @@
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    depends_on:
+      - websocket-server
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/lib/letsencrypt
+      - certbot-www:/var/www/certbot
+    restart: always
+
+  websocket-server:
+    build: .
+    container_name: node-websocket
+    depends_on:
+      - mongo
+      - redis
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      MONGO_URI: ${MONGO_URI}
+      DBNAME: ${DBNAME}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_MAX_AGE: ${JWT_MAX_AGE:-24h}
+      AUTH_ENABLED: ${AUTH_ENABLED:-true}
+      MAX_CONNECTIONS_PER_IP: ${MAX_CONNECTIONS_PER_IP:-10}
+      MAX_MESSAGES_PER_SECOND: ${MAX_MESSAGES_PER_SECOND:-50}
+      MAX_AUTH_FAILURES_PER_IP: ${MAX_AUTH_FAILURES_PER_IP:-5}
+      BAN_DURATION_MS: ${BAN_DURATION_MS:-900000}
+      # ─── Redis Cache ──────────────────────────────────────────────────────
+      REDIS_ENABLED: ${REDIS_ENABLED:-true}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      # ─── MongoDB Pool ─────────────────────────────────────────────────────
+      MONGO_POOL_SIZE: ${MONGO_POOL_SIZE:-50}
+      MONGO_MIN_POOL_SIZE: ${MONGO_MIN_POOL_SIZE:-10}
+      # ─── WebSocket Compression ────────────────────────────────────────────
+      WS_COMPRESSION_ENABLED: ${WS_COMPRESSION_ENABLED:-true}
+      WS_PING_INTERVAL: ${WS_PING_INTERVAL:-30000}
+      # ─── Cluster Mode ─────────────────────────────────────────────────────
+      CLUSTER_ENABLED: ${CLUSTER_ENABLED:-false}
+      CLUSTER_WORKERS: ${CLUSTER_WORKERS:-0}
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    restart: always
+
+  mongo:
+    image: mongo:8.0
+    container_name: mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      DBNAME: ${DBNAME}
+      MONGO_USER: ${MONGO_USER}
+      MONGO_PASSWORD: ${MONGO_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d
+    restart: always
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: certbot
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/lib/letsencrypt
+      - certbot-www:/var/www/certbot
+
+volumes:
+  certbot-etc:
+  certbot-var:
+  certbot-www:
+  mongo-data:
+  redis-data:

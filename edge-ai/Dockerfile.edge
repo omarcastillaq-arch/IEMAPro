@@ -1,0 +1,24 @@
+# Horizon Medical - Edge AI ECG Inference Container
+# Optimized for edge deployment with minimal footprint
+FROM python:3.11-slim
+
+# Install only runtime dependencies (no full TensorFlow)
+RUN pip install --no-cache-dir \
+    numpy>=1.23.0 \
+    scipy>=1.10.0 \
+    scikit-learn>=1.2.0 \
+    tflite-runtime>=2.14.0
+
+# Copy pipeline code and quantized model
+COPY signal_pipeline/ /app/signal_pipeline/
+
+WORKDIR /app
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s \
+    CMD python -c "from signal_pipeline.scripts.edge_inference import ECGEdgeInferenceEngine; print('OK')"
+
+# Default: run edge inference with demo
+CMD ["python", "-m", "signal_pipeline.scripts.edge_inference", \
+     "--model", "signal_pipeline/models/exported/ecg_model_quantized.tflite", \
+     "--demo"]

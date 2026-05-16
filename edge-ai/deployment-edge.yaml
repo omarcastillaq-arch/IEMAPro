@@ -1,0 +1,88 @@
+---
+# Horizon Medical - Edge AI ECG Inference Deployment
+# Kubernetes Deployment for edge inference pods
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ecg-edge-inference
+  labels:
+    app: ecg-edge-inference
+    version: "2.0"
+    component: ai-inference
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ecg-edge-inference
+  template:
+    metadata:
+      labels:
+        app: ecg-edge-inference
+        version: "2.0"
+    spec:
+      containers:
+        - name: ecg-inference
+          image: hrzmed/ecg-edge-inference:2.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          env:
+            - name: MODEL_PATH
+              value: "/app/signal_pipeline/models/exported/ecg_model_quantized.tflite"
+            - name: WS_URL
+              value: "ws://websocket-server:3000"
+            - name: CONFIDENCE_THRESHOLD
+              value: "0.7"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "from signal_pipeline.scripts.edge_inference import ECGEdgeInferenceEngine; print('OK')"
+            initialDelaySeconds: 10
+            periodSeconds: 30
+---
+# DaemonSet variant for edge node deployment
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ecg-edge-inference-ds
+  labels:
+    app: ecg-edge-inference
+    version: "2.0"
+spec:
+  selector:
+    matchLabels:
+      app: ecg-edge-inference-ds
+  template:
+    metadata:
+      labels:
+        app: ecg-edge-inference-ds
+        version: "2.0"
+    spec:
+      containers:
+        - name: ecg-inference
+          image: hrzmed/ecg-edge-inference:2.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MODEL_PATH
+              value: "/app/signal_pipeline/models/exported/ecg_model_quantized.tflite"
+            - name: CONFIDENCE_THRESHOLD
+              value: "0.7"
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "250m"
+      nodeSelector:
+        node-role: edge

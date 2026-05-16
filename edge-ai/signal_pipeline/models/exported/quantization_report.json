@@ -1,0 +1,19 @@
+{
+  "original_model": {
+    "format": "Keras (float32)",
+    "size_kb": 61.3,
+    "params": 15685
+  },
+  "quantized_models": {
+    "tflite_int8": {
+      "path": "signal_pipeline/models/exported/ecg_model_quantized.tflite",
+      "size_kb": 31.0,
+      "compression_ratio": 2.0
+    },
+    "tflite_fp16": {
+      "path": "signal_pipeline/models/exported/ecg_model_quantized_fp16.tflite",
+      "size_kb": 43.8,
+      "compression_ratio": 1.4
+    }
+  }
+}

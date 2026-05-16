@@ -1,0 +1,47 @@
+{
+  "name": "hrzmed_wss",
+  "version": "1.0.0",
+  "description": "Node.js WebSocket server behind Nginx with Let's Encrypt",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "AUTH_ENABLED=false node index.js",
+    "test": "node --test --test-force-exit tests/*.test.js",
+    "test:api": "node --test --test-force-exit tests/api-rest.test.js",
+    "test:unit": "node --test --test-force-exit tests/auth.test.js tests/ecgValidator.test.js tests/signalCompressor.test.js tests/persistence.test.js tests/monitoring.test.js",
+    "test:integration": "node --test --test-force-exit tests/integration.test.js",
+    "test:coverage": "c8 --reporter=text --reporter=lcov --reporter=json-summary --report-dir=coverage node --test --test-force-exit tests/*.test.js",
+    "test:coverage:unit": "c8 --reporter=text --reporter=lcov --report-dir=coverage node --test --test-force-exit tests/auth.test.js tests/ecgValidator.test.js tests/signalCompressor.test.js tests/persistence.test.js",
+    "lint": "eslint . --ext .js",
+    "lint:fix": "eslint . --ext .js --fix",
+    "lint:report": "mkdir -p reports && eslint . --ext .js --format json --output-file reports/eslint-report.json || true",
+    "generate-token": "node scripts/generate-token.js",
+    "ci": "npm run lint && npm test",
+    "precommit": "npm run lint && npm run test:unit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jgrana2/hrzmed_wss.git"
+  },
+  "author": "Jose Granados",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jgrana2/hrzmed_wss/issues"
+  },
+  "homepage": "https://github.com/jgrana2/hrzmed_wss#readme",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "ioredis": "^5.10.1",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^8.9.5",
+    "pdfkit": "^0.18.0",
+    "uuid": "^14.0.0",
+    "winston": "^3.19.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "c8": "^8.0.1",
+    "eslint": "^8.57.1",
+    "mongodb-memory-server": "^11.1.0"
+  }
+}
