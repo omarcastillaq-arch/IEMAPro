@@ -1,0 +1,215 @@
+// CRITICAL: This schema file is shared across multiple applications. Only make edits with explicit user consent. Changes here affect all apps using this database.
+
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+    output = "/home/ubuntu/horizon_mobile_app/nodejs_space/node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model organization {
+  id                  String   @id @default(cuid())
+  name                String
+  slug                String   @unique
+  type                String   @default("clinic") // clinic, hospital, insurance, b2c_patient, enterprise
+  email               String
+  phone               String?
+  address_street      String?
+  address_city        String?
+  address_state       String?
+  address_country     String?
+  address_zip_code    String?
+  plan                String   @default("FREE") // FREE, STARTER, PRO, ENTERPRISE
+  subscription_status String   @default("trial") // active, trial, suspended, cancelled, expired
+  credits_balance     Int      @default(0)
+  is_active           Boolean  @default(true)
+  settings_timezone   String   @default("America/Mexico_City")
+  settings_language   String   @default("es")
+  settings_currency   String   @default("MXN")
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  enrollments         rpm_enrollment[]
+  api_keys            api_key[]
+  users               user[]
+  onboarding_progress onboarding_progress?
+  invitations         invitation[]
+  patient_profiles    patient_profile[]
+}
+
+model user {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  name            String
+  role            String   @default("PATIENT") // SUPER_ADMIN, ORG_ADMIN, DOCTOR, PATIENT
+  organization_id String?
+  is_active       Boolean  @default(true)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization    organization?    @relation(fields: [organization_id], references: [id])
+  patient_profile patient_profile?
+}
+
+model rpm_enrollment {
+  id                    String    @id @default(cuid())
+  organization_id       String
+  patient_id            String
+  patient_name          String?
+  status                String    @default("active") // active, paused, completed, cancelled
+  monitoring_type       String    @default("continuous") // continuous, event_based, scheduled
+  alert_threshold_hr_high  Int    @default(120)
+  alert_threshold_hr_low   Int    @default(50)
+  alert_threshold_spo2_low Int    @default(90)
+  alert_threshold_bp_sys_high Int @default(140)
+  alert_threshold_bp_dia_high Int @default(90)
+  alert_threshold_glucose_high Int @default(180)
+  alert_threshold_glucose_low  Int @default(70)
+  assigned_device_id    String?
+  assigned_physician_id String?
+  enrolled_at           DateTime  @default(now())
+  completed_at          DateTime?
+  last_data_received_at DateTime?
+  price_per_month       Float     @default(0)
+  billing_start_date    DateTime  @default(now())
+  diagnosis             String?
+  notes                 String?
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @updatedAt
+
+  organization organization @relation(fields: [organization_id], references: [id])
+  vitals       rpm_vital[]
+  alerts       rpm_alert[]
+
+  @@unique([organization_id, patient_id])
+  @@index([organization_id, status])
+}
+
+model rpm_vital {
+  id            String   @id @default(cuid())
+  enrollment_id String
+  vital_type    String   // BLOOD_PRESSURE, HEART_RATE, SPO2, GLUCOSE, TEMPERATURE, WEIGHT
+  value         Float
+  value2        Float?   // For BP: diastolic; nullable for single-value vitals
+  unit          String   // mmHg, bpm, %, mg/dL, °C, kg
+  source        String   @default("device") // device, manual, api
+  is_abnormal   Boolean  @default(false)
+  recorded_at   DateTime @default(now())
+  created_at    DateTime @default(now())
+
+  enrollment rpm_enrollment @relation(fields: [enrollment_id], references: [id])
+
+  @@index([enrollment_id, vital_type])
+  @@index([enrollment_id, recorded_at])
+  @@index([recorded_at])
+}
+
+model rpm_alert {
+  id              String    @id @default(cuid())
+  enrollment_id   String
+  type            String    // HIGH_HEART_RATE, LOW_HEART_RATE, LOW_SPO2, HIGH_BP, HIGH_GLUCOSE, LOW_GLUCOSE, MISSED_READING, DEVICE_OFFLINE
+  priority        String    // CRITICAL, WARNING, INFO
+  status          String    @default("NEW") // NEW, ACKNOWLEDGED, RESOLVED
+  message         String
+  vital_id        String?   // Reference to the vital that triggered alert
+  acknowledged_by String?
+  acknowledged_at DateTime?
+  resolved_by     String?
+  resolved_at     DateTime?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  enrollment rpm_enrollment @relation(fields: [enrollment_id], references: [id])
+
+  @@index([enrollment_id, status])
+  @@index([priority, status])
+  @@index([created_at])
+}
+
+model api_key {
+  id              String    @id @default(cuid())
+  key_hash        String    @unique
+  key_prefix      String    // First 8 chars for identification
+  name            String
+  organization_id String
+  permissions     String[]  // rpm.read, rpm.write, rpm.alerts, rpm.analytics, org.read, org.write, users.read, users.write, onboarding.manage, b2c.read, b2c.write
+  is_active       Boolean   @default(true)
+  last_used_at    DateTime?
+  created_at      DateTime  @default(now())
+  expires_at      DateTime?
+
+  organization organization @relation(fields: [organization_id], references: [id])
+
+  @@index([organization_id])
+}
+
+// ─── Onboarding ──────────────────────────────────────────────────────────────
+
+model onboarding_progress {
+  id              String   @id @default(cuid())
+  organization_id String   @unique
+  current_step    Int      @default(1)  // 1-5
+  completed_steps Int[]    @default([])
+  org_profile     Boolean  @default(false)  // Step 1: org profile filled
+  admin_created   Boolean  @default(false)  // Step 2: admin user created
+  plan_selected   Boolean  @default(false)  // Step 3: plan chosen
+  first_patient   Boolean  @default(false)  // Step 4: first patient enrolled
+  integration_set Boolean  @default(false)  // Step 5: API key or integration configured
+  is_complete     Boolean  @default(false)
+  started_at      DateTime @default(now())
+  completed_at    DateTime?
+  updated_at      DateTime @updatedAt
+
+  organization organization @relation(fields: [organization_id], references: [id])
+}
+
+model invitation {
+  id              String    @id @default(cuid())
+  organization_id String
+  email           String
+  role            String    @default("DOCTOR") // ORG_ADMIN, DOCTOR, PATIENT
+  invited_by      String?   // user id
+  status          String    @default("pending") // pending, accepted, expired, revoked
+  token           String    @unique
+  accepted_at     DateTime?
+  expires_at      DateTime
+  created_at      DateTime  @default(now())
+
+  organization organization @relation(fields: [organization_id], references: [id])
+
+  @@index([organization_id, status])
+  @@index([email])
+  @@index([token])
+}
+
+// ─── B2C Patient Portal ──────────────────────────────────────────────────────
+
+model patient_profile {
+  id                String    @id @default(cuid())
+  user_id           String    @unique
+  organization_id   String
+  date_of_birth     DateTime?
+  gender            String?   // M, F, Other
+  blood_type        String?   // A+, A-, B+, B-, AB+, AB-, O+, O-
+  height_cm         Float?
+  weight_kg         Float?
+  emergency_contact_name  String?
+  emergency_contact_phone String?
+  allergies         String[]  @default([])
+  medications       String[]  @default([])
+  conditions        String[]  @default([]) // chronic conditions
+  insurance_provider String?
+  insurance_number   String?
+  notes             String?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  user         user         @relation(fields: [user_id], references: [id])
+  organization organization @relation(fields: [organization_id], references: [id])
+
+  @@index([organization_id])
+}
