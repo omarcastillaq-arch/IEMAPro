@@ -45,6 +45,7 @@ model user {
   id              String   @id @default(cuid())
   email           String   @unique
   name            String
+  password        String   @default("")
   role            String   @default("PATIENT") // SUPER_ADMIN, ORG_ADMIN, DOCTOR, PATIENT
   organization_id String?
   is_active       Boolean  @default(true)
