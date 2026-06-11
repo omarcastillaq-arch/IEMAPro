@@ -48,7 +48,8 @@
       "output": "single"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-font"
     ],
     "scheme": "abacusai1779317653",
     "extra": {
