@@ -68,6 +68,14 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="ecg"
+        options={{
+          title: 'ECG',
+          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="heart-pulse" size={size} color={color} />,
+          tabBarButtonTestID: 'tab-ecg',
+        }}
+      />
+      <Tabs.Screen
         name="alerts"
         options={{
           title: 'Alertas',
