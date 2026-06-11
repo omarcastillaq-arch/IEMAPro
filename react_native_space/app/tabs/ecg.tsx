@@ -5,6 +5,7 @@ import {
   ScrollView,
   Pressable,
   Platform,
+  Alert,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,10 +13,11 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ECGWaveform, ECGMultiLead } from '../../src/components/ECGWaveform';
 import { colors, spacing, radii } from '../../src/theme';
+import { bleService, type HRZDevice, type ConnectionStatus } from '../../src/services/bleService';
 import type { MultiLeadSample } from '../../src/services/ecgSimulator';
-import type { ConnectionStatus } from '../../src/services/bleService';
 
 type ViewMode = 'lead2' | '12lead';
+type DataSource = 'simulator' | 'device';
 
 export default function ECGScreen() {
   const [isMonitoring, setIsMonitoring] = useState(false);
@@ -23,9 +25,50 @@ export default function ECGScreen() {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [elapsedTime, setElapsedTime] = useState(0);
   const [viewMode, setViewMode] = useState<ViewMode>('12lead');
+  const [dataSource, setDataSource] = useState<DataSource>('simulator');
+  const [discoveredDevices, setDiscoveredDevices] = useState<HRZDevice[]>([]);
+  const [showDeviceList, setShowDeviceList] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const beatCountRef = useRef(0);
   const lastBeatTimeRef = useRef(0);
+
+  // Setup BLE callbacks
+  useEffect(() => {
+    bleService.setCallbacks({
+      onStatusChange: (status) => {
+        setConnectionStatus(status);
+        if (status === 'connected') {
+          setDataSource('device');
+          setShowDeviceList(false);
+        } else if (status === 'disconnected') {
+          if (isMonitoring) {
+            setDataSource('simulator');
+          }
+        }
+      },
+      onDeviceFound: (device) => {
+        setDiscoveredDevices((prev) => {
+          const exists = prev.some((d) => d.id === device.id);
+          if (exists) return prev;
+          return [...prev, device];
+        });
+      },
+      onMultiLeadData: (samples) => {
+        // Real device data - process for BPM
+        handleECGData(samples);
+      },
+      onError: (error) => {
+        if (Platform.OS !== 'web') {
+          Alert.alert('Bluetooth', error);
+        }
+      },
+    });
+
+    return () => {
+      bleService.destroy();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Calculate BPM from R-peaks on Lead II
   const handleECGData = useCallback((samples: MultiLeadSample[]) => {
@@ -50,12 +93,36 @@ export default function ECGScreen() {
   const toggleMonitoring = useCallback(() => {
     if (isMonitoring) {
       setIsMonitoring(false);
+      if (dataSource === 'device') {
+        bleService.disconnect();
+      }
       setConnectionStatus('disconnected');
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = null;
     } else {
       setIsMonitoring(true);
       setConnectionStatus('connected');
+      setBpm(0);
+      setElapsedTime(0);
+      beatCountRef.current = 0;
+      lastBeatTimeRef.current = 0;
+      timerRef.current = setInterval(() => {
+        setElapsedTime((prev) => prev + 1);
+      }, 1000);
+    }
+  }, [isMonitoring, dataSource]);
+
+  const handleScanDevices = useCallback(async () => {
+    setDiscoveredDevices([]);
+    setShowDeviceList(true);
+    await bleService.startScan();
+  }, []);
+
+  const handleConnectDevice = useCallback(async (device: HRZDevice) => {
+    await bleService.connect(device);
+    // Start monitoring automatically on connect
+    if (!isMonitoring) {
+      setIsMonitoring(true);
       setBpm(0);
       setElapsedTime(0);
       beatCountRef.current = 0;
@@ -87,12 +154,14 @@ export default function ECGScreen() {
 
   const statusLabel =
     connectionStatus === 'connected'
-      ? 'Conectado'
+      ? dataSource === 'device' ? 'HRZ Conectado' : 'Simulador'
       : connectionStatus === 'scanning'
-        ? 'Buscando...'
+        ? 'Buscando HRZ...'
         : connectionStatus === 'connecting'
           ? 'Conectando...'
           : 'Desconectado';
+
+  const isRealDevice = dataSource === 'device' && connectionStatus === 'connected';
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -144,18 +213,22 @@ export default function ECGScreen() {
           {viewMode === '12lead' ? (
             <>
               <View style={styles.waveformHeader}>
-                <Text style={styles.waveformLabel}>ECG — 12 Derivaciones</Text>
+                <Text style={styles.waveformLabel}>
+                  ECG — 12 Derivaciones {isRealDevice ? '(HRZ)' : '(SIM)'}
+                </Text>
                 <Text style={styles.waveformSpeed}>25 mm/s · 10 mm/mV</Text>
               </View>
-              <ECGMultiLead isActive={isMonitoring} onDataReceived={handleECGData} />
+              <ECGMultiLead isActive={isMonitoring && dataSource === 'simulator'} onDataReceived={handleECGData} />
             </>
           ) : (
             <>
               <View style={styles.waveformHeader}>
-                <Text style={styles.waveformLabel}>ECG — Derivación II</Text>
+                <Text style={styles.waveformLabel}>
+                  ECG — Derivación II {isRealDevice ? '(HRZ)' : '(SIM)'}
+                </Text>
                 <Text style={styles.waveformSpeed}>25 mm/s</Text>
               </View>
-              <ECGWaveform isActive={isMonitoring} onDataReceived={handleECGData} />
+              <ECGWaveform isActive={isMonitoring && dataSource === 'simulator'} onDataReceived={handleECGData} />
             </>
           )}
           {!isMonitoring && (
@@ -168,7 +241,6 @@ export default function ECGScreen() {
 
         {/* Stats Grid */}
         <View style={styles.statsGrid}>
-          {/* BPM */}
           <View style={[styles.statCard, styles.statCardWide]}>
             <View style={styles.statHeader}>
               <MaterialCommunityIcons name="heart-pulse" size={20} color={colors.error} />
@@ -182,7 +254,6 @@ export default function ECGScreen() {
             </View>
           </View>
 
-          {/* Duration */}
           <View style={styles.statCard}>
             <View style={styles.statHeader}>
               <MaterialCommunityIcons name="timer-outline" size={18} color={colors.accent} />
@@ -191,7 +262,6 @@ export default function ECGScreen() {
             <Text style={styles.statValue}>{formatTime(elapsedTime)}</Text>
           </View>
 
-          {/* Beats */}
           <View style={styles.statCard}>
             <View style={styles.statHeader}>
               <MaterialCommunityIcons name="pulse" size={18} color={colors.primary} />
@@ -202,7 +272,6 @@ export default function ECGScreen() {
             </Text>
           </View>
 
-          {/* QT Interval */}
           <View style={styles.statCard}>
             <View style={styles.statHeader}>
               <MaterialCommunityIcons name="chart-bell-curve" size={18} color={colors.warning} />
@@ -214,7 +283,6 @@ export default function ECGScreen() {
             <Text style={styles.statSubUnit}>ms</Text>
           </View>
 
-          {/* RR Interval */}
           <View style={styles.statCard}>
             <View style={styles.statHeader}>
               <MaterialCommunityIcons name="swap-horizontal" size={18} color={colors.success} />
@@ -227,19 +295,63 @@ export default function ECGScreen() {
           </View>
         </View>
 
-        {/* Device Info */}
+        {/* Device Info / BLE Connection */}
         <View style={styles.deviceCard}>
           <View style={styles.deviceRow}>
-            <MaterialCommunityIcons name="bluetooth" size={24} color={isMonitoring ? colors.accent : colors.textTertiary} />
+            <MaterialCommunityIcons
+              name={isRealDevice ? 'bluetooth-connect' : 'bluetooth'}
+              size={24}
+              color={isRealDevice ? colors.success : connectionStatus === 'scanning' ? colors.warning : colors.textTertiary}
+            />
             <View style={styles.deviceInfo}>
               <Text style={styles.deviceName}>Horizon Medical HRZ</Text>
               <Text style={styles.deviceModel}>ADS1298 · 8 canales · 24-bit</Text>
               <Text style={styles.deviceStatus}>
-                {isMonitoring ? 'Simulador activo — Conecta tu HRZ por Bluetooth' : 'Dispositivo listo para conectar'}
+                {isRealDevice
+                  ? `✅ Conectado: ${bleService.getConnectedDevice()?.name ?? 'HRZ'}`
+                  : connectionStatus === 'scanning'
+                    ? '🔎 Buscando dispositivos HRZ...'
+                    : isMonitoring
+                      ? '📊 Usando simulador — Conecta tu HRZ'
+                      : 'Toca "Buscar HRZ" para conectar'}
               </Text>
             </View>
+            {!isRealDevice && connectionStatus !== 'scanning' && connectionStatus !== 'connecting' && (
+              <Pressable onPress={handleScanDevices} style={styles.scanBtn}>
+                <MaterialCommunityIcons name="bluetooth-audio" size={18} color={colors.accent} />
+                <Text style={styles.scanBtnText}>Buscar HRZ</Text>
+              </Pressable>
+            )}
+            {isRealDevice && (
+              <Pressable onPress={() => bleService.disconnect()} style={styles.disconnectBtn}>
+                <Text style={styles.disconnectBtnText}>Desconectar</Text>
+              </Pressable>
+            )}
           </View>
         </View>
+
+        {/* Discovered Devices List */}
+        {showDeviceList && discoveredDevices.length > 0 && (
+          <View style={styles.deviceListCard}>
+            <Text style={styles.deviceListTitle}>Dispositivos encontrados</Text>
+            {discoveredDevices.map((device) => (
+              <Pressable
+                key={device.id}
+                onPress={() => handleConnectDevice(device)}
+                style={styles.deviceListItem}
+              >
+                <MaterialCommunityIcons name="bluetooth" size={20} color={colors.accent} />
+                <View style={styles.deviceListInfo}>
+                  <Text style={styles.deviceListName}>{device.name}</Text>
+                  <Text style={styles.deviceListId}>{device.id}</Text>
+                </View>
+                <View style={styles.rssiContainer}>
+                  <Text style={styles.rssiText}>{device.rssi} dBm</Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        )}
 
         {/* Start/Stop Button */}
         <Pressable onPress={toggleMonitoring} style={styles.actionBtn}>
@@ -422,7 +534,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   deviceRow: {
     flexDirection: 'row',
@@ -446,6 +558,81 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textTertiary,
     marginTop: 2,
+  },
+  scanBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: `${colors.accent}15`,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: `${colors.accent}30`,
+  },
+  scanBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.accent,
+  },
+  disconnectBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radii.md,
+    backgroundColor: `${colors.error}15`,
+    borderWidth: 1,
+    borderColor: `${colors.error}30`,
+  },
+  disconnectBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.error,
+  },
+  deviceListCard: {
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    marginBottom: spacing.lg,
+  },
+  deviceListTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+  },
+  deviceListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.cardBorder,
+  },
+  deviceListInfo: {
+    flex: 1,
+  },
+  deviceListName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  deviceListId: {
+    fontSize: 11,
+    color: colors.textTertiary,
+    marginTop: 2,
+  },
+  rssiContainer: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: colors.surface,
+    borderRadius: radii.sm,
+  },
+  rssiText: {
+    fontSize: 11,
+    color: colors.textTertiary,
+    fontWeight: '500',
   },
   actionBtn: {
     borderRadius: radii.lg,
