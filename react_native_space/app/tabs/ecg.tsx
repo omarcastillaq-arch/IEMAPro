@@ -10,36 +10,38 @@ import { Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ECGWaveform } from '../../src/components/ECGWaveform';
+import { ECGWaveform, ECGMultiLead } from '../../src/components/ECGWaveform';
 import { colors, spacing, radii } from '../../src/theme';
-import type { ECGDataPoint } from '../../src/services/ecgSimulator';
+import type { MultiLeadSample } from '../../src/services/ecgSimulator';
 import type { ConnectionStatus } from '../../src/services/bleService';
+
+type ViewMode = 'lead2' | '12lead';
 
 export default function ECGScreen() {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [bpm, setBpm] = useState(0);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [viewMode, setViewMode] = useState<ViewMode>('12lead');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const beatCountRef = useRef(0);
   const lastBeatTimeRef = useRef(0);
 
-  // Calculate BPM from R-peaks
-  const handleECGData = useCallback((points: ECGDataPoint[]) => {
-    for (const p of points) {
-      // Detect R-peak (value > 0.7 threshold)
-      if (p.value > 0.7) {
+  // Calculate BPM from R-peaks on Lead II
+  const handleECGData = useCallback((samples: MultiLeadSample[]) => {
+    for (const s of samples) {
+      const val = s?.leads?.['II'] ?? 0;
+      if (val > 0.7) {
         if (lastBeatTimeRef.current > 0) {
-          const interval = p.time - lastBeatTimeRef.current;
+          const interval = s.time - lastBeatTimeRef.current;
           if (interval > 0.3) {
-            // Minimum 0.3s between beats (max 200 BPM)
             const instantBPM = Math.round(60 / interval);
-            setBpm((prev) => Math.round(prev * 0.7 + instantBPM * 0.3)); // Smoothed
+            setBpm((prev) => Math.round(prev * 0.7 + instantBPM * 0.3));
             beatCountRef.current += 1;
-            lastBeatTimeRef.current = p.time;
+            lastBeatTimeRef.current = s.time;
           }
         } else {
-          lastBeatTimeRef.current = p.time;
+          lastBeatTimeRef.current = s.time;
         }
       }
     }
@@ -101,19 +103,61 @@ export default function ECGScreen() {
             <Text style={styles.title}>Monitor ECG</Text>
             <Text style={styles.subtitle}>Electrocardiograma en tiempo real</Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: `${statusColor}20` }]}> 
+          <View style={[styles.statusBadge, { backgroundColor: `${statusColor}20` }]}>
             <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
             <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
           </View>
         </View>
 
+        {/* View Mode Toggle */}
+        <View style={styles.toggleRow}>
+          <Pressable
+            onPress={() => setViewMode('12lead')}
+            style={[styles.toggleBtn, viewMode === '12lead' && styles.toggleActive]}
+          >
+            <MaterialCommunityIcons
+              name="view-grid"
+              size={16}
+              color={viewMode === '12lead' ? colors.white : colors.textTertiary}
+            />
+            <Text style={[styles.toggleText, viewMode === '12lead' && styles.toggleTextActive]}>
+              12 Derivaciones
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setViewMode('lead2')}
+            style={[styles.toggleBtn, viewMode === 'lead2' && styles.toggleActive]}
+          >
+            <MaterialCommunityIcons
+              name="chart-line"
+              size={16}
+              color={viewMode === 'lead2' ? colors.white : colors.textTertiary}
+            />
+            <Text style={[styles.toggleText, viewMode === 'lead2' && styles.toggleTextActive]}>
+              Derivación II
+            </Text>
+          </Pressable>
+        </View>
+
         {/* ECG Waveform */}
         <View style={styles.waveformContainer}>
-          <View style={styles.waveformHeader}>
-            <Text style={styles.waveformLabel}>ECG — Derivación II</Text>
-            <Text style={styles.waveformSpeed}>25 mm/s</Text>
-          </View>
-          <ECGWaveform isActive={isMonitoring} onDataReceived={handleECGData} />
+          {viewMode === '12lead' ? (
+            <>
+              <View style={styles.waveformHeader}>
+                <Text style={styles.waveformLabel}>ECG — 12 Derivaciones</Text>
+                <Text style={styles.waveformSpeed}>25 mm/s · 10 mm/mV</Text>
+              </View>
+              <ECGMultiLead isActive={isMonitoring} onDataReceived={handleECGData} />
+            </>
+          ) : (
+            <>
+              <View style={styles.waveformHeader}>
+                <Text style={styles.waveformLabel}>ECG — Derivación II</Text>
+                <Text style={styles.waveformSpeed}>25 mm/s</Text>
+              </View>
+              <ECGWaveform isActive={isMonitoring} onDataReceived={handleECGData} />
+            </>
+          )}
           {!isMonitoring && (
             <View style={styles.waveformOverlay}>
               <MaterialCommunityIcons name="heart-pulse" size={48} color={colors.textTertiary} />
@@ -158,7 +202,7 @@ export default function ECGScreen() {
             </Text>
           </View>
 
-          {/* QT Interval (simulated) */}
+          {/* QT Interval */}
           <View style={styles.statCard}>
             <View style={styles.statHeader}>
               <MaterialCommunityIcons name="chart-bell-curve" size={18} color={colors.warning} />
@@ -189,8 +233,9 @@ export default function ECGScreen() {
             <MaterialCommunityIcons name="bluetooth" size={24} color={isMonitoring ? colors.accent : colors.textTertiary} />
             <View style={styles.deviceInfo}>
               <Text style={styles.deviceName}>Horizon Medical HRZ</Text>
+              <Text style={styles.deviceModel}>ADS1298 · 8 canales · 24-bit</Text>
               <Text style={styles.deviceStatus}>
-                {isMonitoring ? 'Simulador activo — Conecta tu dispositivo HRZ por Bluetooth' : 'Dispositivo listo para conectar'}
+                {isMonitoring ? 'Simulador activo — Conecta tu HRZ por Bluetooth' : 'Dispositivo listo para conectar'}
               </Text>
             </View>
           </View>
@@ -227,7 +272,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   title: {
     fontSize: 28,
@@ -256,8 +301,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  toggleRow: {
+    flexDirection: 'row',
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    padding: 4,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  toggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: radii.sm,
+    gap: 6,
+  },
+  toggleActive: {
+    backgroundColor: colors.primary,
+  },
+  toggleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textTertiary,
+  },
+  toggleTextActive: {
+    color: colors.white,
+  },
   waveformContainer: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
     position: 'relative',
   },
   waveformHeader: {
@@ -362,6 +436,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: colors.textPrimary,
+  },
+  deviceModel: {
+    fontSize: 12,
+    color: colors.accent,
+    marginTop: 2,
   },
   deviceStatus: {
     fontSize: 12,
